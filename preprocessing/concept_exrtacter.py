@@ -265,6 +265,7 @@ def propose_attributes_with_llm(
     max_chars_per_field: int,
     top_k: int,
     seed: int,
+    llm_debug_output_path: Optional[str] = None,
 ) -> Dict[str, AttributeCandidate]:
     columns = _discover_columns(csv_path)
     equip_col = _find_equipment_column(columns)
@@ -307,6 +308,13 @@ def propose_attributes_with_llm(
         )
         messages = prompt.format_messages(rows=rows_blob)
         resp = llm.invoke(messages)
+
+        # Optional: dump the *first* raw LLM response for inspection/debugging.
+        if llm_debug_output_path and start == 0:
+            os.makedirs(os.path.dirname(llm_debug_output_path) or ".", exist_ok=True)
+            with open(llm_debug_output_path, "w", encoding="utf-8") as f:
+                f.write(resp.content)
+
         data = _best_effort_json_load(resp.content)
         attrs = data.get("attributes", [])
         if not isinstance(attrs, list):
@@ -485,6 +493,11 @@ def main() -> int:
     ap.add_argument("--llm_rows_per_call", type=int, default=20, help="How many sample rows to send per LLM call.")
     ap.add_argument("--max_chars_per_field", type=int, default=700)
     ap.add_argument(
+        "--llm_debug_output_path",
+        default="",
+        help="If set, writes the raw LLM output for the first batch to this path.",
+    )
+    ap.add_argument(
         "--max_forms_to_scan",
         type=int,
         default=0,
@@ -510,6 +523,7 @@ def main() -> int:
         max_chars_per_field=args.max_chars_per_field,
         top_k=args.top_k,
         seed=args.seed,
+        llm_debug_output_path=(args.llm_debug_output_path.strip() or None),
     )
     print(f"Proposed {len(candidates)} attributes. Scanning dataset for counts...", file=sys.stderr)
 
